@@ -1,4 +1,8 @@
 """코디세이 OT 퀴즈 게임"""
+import json
+from pathlib import Path
+
+STATE_FILE = Path(__file__).parent / "state.json"  # 프로젝트 루트의 state.json
 
 
 def read_number(prompt, min_value, max_value):
@@ -44,6 +48,15 @@ class Quiz:
         """사용자가 고른 번호가 정답이면 True를 돌려준다."""
         return user_answer == self.answer
 
+    def to_dict(self):
+        """JSON으로 저장할 수 있도록 딕셔너리로 바꾼다."""
+        return {
+            "question": self.question,
+            "choices": self.choices,
+            "answer": self.answer,
+        }
+
+
 def create_default_quizzes():
     """코디세이 OT 자료로 만든 기본 퀴즈 목록을 돌려준다."""
     return [
@@ -67,13 +80,70 @@ def create_default_quizzes():
               "코디세이 개발자의 이름", "'Network'의 줄임말"], 2),
     ]
 
+def is_valid_quiz_data(item):
+    """파일에서 읽은 퀴즈 한 개가 올바른 형식인지 검사한다."""
+    return (
+        isinstance(item, dict)
+        and isinstance(item.get("question"), str)
+        and isinstance(item.get("choices"), list)
+        and len(item["choices"]) == 4
+        and isinstance(item.get("answer"), int)
+        and 1 <= item["answer"] <= 4
+    )
 
 class QuizGame:
     """게임 전체(메뉴, 진행)를 관리하는 클래스"""
 
     def __init__(self):
         self.is_running = True
-        self.quizzes = create_default_quizzes()
+        self.quizzes = []
+        self.best_score = None  # 아직 푼 적 없으면 None
+        self.load_state()
+
+    def load_state(self):
+        """state.json에서 퀴즈와 최고 점수를 불러온다."""
+        if not STATE_FILE.exists():
+            self.quizzes = create_default_quizzes()
+            print("📂 저장된 데이터가 없어 기본 퀴즈로 시작합니다.")
+            return
+
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as file:
+                data = json.load(file)
+
+            quizzes = []
+            for item in data["quizzes"]:
+                if not is_valid_quiz_data(item):
+                    raise ValueError("퀴즈 형식 오류")
+                quizzes.append(Quiz(item["question"], item["choices"], item["answer"]))
+
+            best_score = data.get("best_score")
+            if best_score is not None and not isinstance(best_score, int):
+                raise ValueError("점수 형식 오류")
+
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+            print("⚠️ 저장 파일이 손상되어 기본 퀴즈 데이터로 복구합니다.")
+            self.quizzes = create_default_quizzes()
+            self.best_score = None
+            self.save_state()
+            return
+
+        self.quizzes = quizzes
+        self.best_score = best_score
+        score_text = f"{best_score}점" if best_score is not None else "기록 없음"
+        print(f"📂 저장된 데이터를 불러왔습니다. (퀴즈 {len(quizzes)}개, 최고점수 {score_text})")
+
+    def save_state(self):
+        """현재 퀴즈와 최고 점수를 state.json에 저장한다."""
+        data = {
+            "quizzes": [quiz.to_dict() for quiz in self.quizzes],
+            "best_score": self.best_score,
+        }
+        try:
+            with open(STATE_FILE, "w", encoding="utf-8") as file:
+                json.dump(data, file, ensure_ascii=False, indent=4)
+        except OSError:
+            print("⚠️ 파일 저장 중 오류가 발생했습니다.")
 
     def show_menu(self):
         print()
@@ -122,7 +192,9 @@ class QuizGame:
             print("\n🚧 퀴즈 목록 기능은 준비 중입니다.")
         elif choice == 4:
             print("\n🚧 점수 확인 기능은 준비 중입니다.")
+
         elif choice == 5:
+            self.save_state()
             print("\n👋 게임을 종료합니다. 다음에 또 만나요!")
             self.is_running = False
 
