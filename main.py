@@ -253,10 +253,15 @@ class QuizGame:
             self.is_running = False
 
     def run(self):
-        while self.is_running:
-            self.show_menu()
-            choice = read_number("선택: ", 1, 5)
-            self.handle_choice(choice)
+        """메뉴를 반복해서 보여주고, 강제 종료 신호가 와도 저장 후 안전하게 끝낸다."""
+        try:
+            while self.is_running:
+                self.show_menu()
+                choice = read_number("선택: ", 1, 5)
+                self.handle_choice(choice)
+        except (KeyboardInterrupt, EOFError):
+            print("\n\n⚠️ 입력이 중단되었습니다. 데이터를 저장하고 안전하게 종료합니다.")
+            self.save_state()
 
 
 if __name__ == "__main__":
